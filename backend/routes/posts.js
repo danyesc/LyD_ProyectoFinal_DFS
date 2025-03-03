@@ -3,10 +3,10 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const db = require('../db'); // Archivo de conexión a la base de datos
+const Post = require('../models/Post');  // Modelo de MongoDB
 const authenticateToken = require('../middleware/auth');
 
-// Ensure uploads directory exists
+// Asegurar que el directorio 'uploads' exista
 const uploadDir = 'uploads';
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
@@ -35,25 +35,26 @@ const upload = multer({
 });
 
 // Obtener publicaciones
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
     const offset = (page - 1) * limit;
 
-    db.query(
-        'SELECT p.*, u.nombre AS username FROM posts p LEFT JOIN usuarios u ON p.user_id = u.id LIMIT ? OFFSET ?',
-        [limit, offset],
-        (err, results) => {
-            if (err) {
-                return res.status(500).json({ error: err.message });
-            }
-            res.json({ page, limit, results });
-        }
-    );
+    try {
+        const posts = await Post.find()
+            .skip(offset)
+            .limit(limit)
+            .populate('user_id', 'nombre') // Esto reemplaza el JOIN con MongoDB
+            .exec();
+
+        res.json({ page, limit, results: posts });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Crear una nueva publicación (protegida con JWT)
-router.post('/', authenticateToken, upload.single('image'), (req, res) => {
+router.post('/', authenticateToken, upload.single('image'), async (req, res) => {
     if (req.fileValidationError) {
         return res.status(400).json({ error: req.fileValidationError });
     }
@@ -63,38 +64,42 @@ router.post('/', authenticateToken, upload.single('image'), (req, res) => {
 
     const image = req.file ? req.file.filename : null;
 
-    db.query(
-        'INSERT INTO posts (title, content, location, user_id, image) VALUES (?, ?, ?, ?, ?)',
-        [title, content, location, user_id, image],
-        (err, results) => {
-            if (err) {
-                console.error("Error creando publicación:", err);
-                return res.status(500).json({ error: err.message });
-            }
+    try {
+        const newPost = new Post({
+            title,
+            content,
+            location,
+            user_id,
+            image,
+        });
 
-            const imageUrl = image ? `/uploads/${image}` : null;
-            res.status(201).json({ message: 'Post created', id: results.insertId, imageUrl });
-        }
-    );
+        const savedPost = await newPost.save();
+
+        const imageUrl = image ? `/uploads/${image}` : null;
+        res.status(201).json({ message: 'Post created', id: savedPost._id, imageUrl });
+    } catch (err) {
+        console.error('Error creando publicación:', err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Eliminar una publicación (protegida con JWT)
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
     const postId = req.params.id;
     const userId = req.user.id; // Se obtiene del token
 
-    db.query('DELETE FROM posts WHERE id = ? AND user_id = ?', [postId, userId], (err, results) => {
-        if (err) {
-            console.error("Error al eliminar publicación:", err);
-            return res.status(500).json({ error: err.message });
-        }
+    try {
+        const post = await Post.findOneAndDelete({ _id: postId, user_id: userId });
 
-        if (results.affectedRows === 0) {
+        if (!post) {
             return res.status(404).json({ error: "Publicación no encontrada o no tienes permiso para eliminarla" });
         }
 
         res.status(200).json({ message: "Publicación eliminada exitosamente" });
-    });
+    } catch (err) {
+        console.error("Error al eliminar publicación:", err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = router;

@@ -6,7 +6,7 @@ async function registerUser(nombre, email, password) {
     }
 
     try {
-        const response = await fetch('/api/users/register', {
+        const response = await fetch('http://localhost:3000/api/users/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nombre, email, password })
@@ -29,7 +29,7 @@ async function registerUser(nombre, email, password) {
 // Función para iniciar sesión
 async function loginUser(email, password) {
     try {
-        const response = await fetch('/api/users/login', {
+        const response = await fetch('http://localhost:3000/api/users/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -112,7 +112,7 @@ async function fetchPosts() {
         postsContainer.innerHTML = '';
 
         // Iterar sobre cada publicación y crear elementos HTML
-        posts.results.forEach(post => {
+        posts.forEach(post => { // Si la respuesta ya es un array (o lista) de posts
             const postElement = document.createElement('div');
             postElement.className = 'post';
             postElement.innerHTML = `
@@ -121,7 +121,7 @@ async function fetchPosts() {
                 ${post.image ? `<img src="http://localhost:3000/uploads/${post.image}" alt="${post.title}" style="width: 200px; height: auto;" onerror="this.onerror=null; this.src='fallback-image.jpg';">` : '<p>Sin imagen</p>'}
                 <p>${post.content}</p>
                 <p><strong>Publicado por:</strong> ${post.username || 'Desconocido'}</p>
-                <button class="delete-post" data-id="${post.id}">Eliminar</button>
+                <button class="delete-post" data-id="${post._id}">Eliminar</button> <!-- Cambio a _id de MongoDB -->
             `;
             postsContainer.appendChild(postElement); // Agregar el elemento al contenedor
         });
@@ -195,4 +195,3 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 });
-
